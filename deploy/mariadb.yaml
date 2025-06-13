@@ -1,0 +1,82 @@
+
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: dootask-mariadb
+spec:
+  serviceName: dootask-mariadb
+  replicas: 1
+  selector:
+    matchLabels:
+      app: dootask-mariadb
+  template:
+    metadata:
+      labels:
+        app: dootask-mariadb
+    spec:
+      initContainers:
+        - command:
+            - rm
+            - -fr
+            - /var/lib/mysql/lost+found
+          image: busybox
+          name: remove-lost-found
+          resources:
+            requests:
+              cpu: 10m
+              memory: 10Mi
+          volumeMounts:
+            - mountPath: /var/lib/mysql
+              name: mysql-data
+      containers:
+      - name: mariadb
+        image: mariadb:10.7.3
+        ports:
+        - containerPort: 3306
+        env:
+        - name: MYSQL_ROOT_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: dootask-secret
+              key: DB_ROOT_PASSWORD
+        - name: MYSQL_DATABASE
+          valueFrom:
+            secretKeyRef:
+              name: dootask-secret
+              key: DB_DATABASE
+        - name: MYSQL_USER
+          valueFrom:
+            secretKeyRef:
+              name: dootask-secret
+              key: DB_USERNAME
+        - name: MYSQL_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: dootask-secret
+              key: DB_PASSWORD
+        - name: MYSQL_PREFIX
+          value: pre_
+        volumeMounts:
+        - name: mysql-data
+          mountPath: /var/lib/mysql
+        - name: dbconfig
+          mountPath: /etc/mysql/conf.d/my.conf
+          subPath: my.conf
+      volumes:
+        - name: mysql-data
+          persistentVolumeClaim:
+            claimName: mysql-data-pvc
+        - name: dbconfig
+          configMap:
+            name: dootask-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: dootask-mariadb
+spec:
+  ports:
+  - port: 3306
+  selector:
+    app: dootask-mariadb
+

@@ -1,0 +1,59 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: dootask-nginx
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: dootask-nginx
+  template:
+    metadata:
+      labels:
+        app: dootask-nginx
+    spec:
+      initContainers:
+      - name: wait-for-job
+        image: busybox
+        command: ['sh', '-c', 'until [ -f "/app/success" ]; do echo "waiting for init-job to complete"; sleep 2; done']
+        volumeMounts:
+        - name: app-data
+          mountPath: /app
+      containers:
+      - name: nginx
+        image: nginx:alpine
+        ports:
+        - containerPort: 80
+          name: http
+        - containerPort: 443
+          name: https
+        volumeMounts:
+        - name: site
+          mountPath: /etc/nginx/conf.d/site
+        - name: confd
+          mountPath: /etc/nginx/conf.d
+        - name: app-data
+          mountPath: /var/www/public
+          subPath: dootask/public
+      volumes:
+      - name: app-data
+        persistentVolumeClaim:
+          claimName: dootask-app-pvc
+      - name: site
+        configMap:
+          name: nginx-site-config
+      - name: confd
+        configMap:
+          name: nginx-config
+---
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: nginx
+spec:
+  ports:
+    - port: 80
+      targetPort: 80
+  selector:
+    app: dootask-nginx
