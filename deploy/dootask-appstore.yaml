@@ -17,7 +17,7 @@ spec:
     spec:
       containers:
         - name: appstore
-          image: 'dootask/appstore:0.1.1'
+          image: 'dootask/appstore:0.1.2'
           ports:
             - name: http
               containerPort: 80
@@ -31,7 +31,14 @@ spec:
         - name: appstore-data
           mountPath: /var/www/docker/appstore
           subPath: appstore
-          
+      - name: appstore
+        image: rubyroes/fastapi:latest
+        ports:
+        - containerPort: 8000
+        volumeMounts:
+        - name: appstore-data
+          mountPath: /app/config
+          subPath: appstore/config
       volumes:
       - name: appstore-data
         persistentVolumeClaim:

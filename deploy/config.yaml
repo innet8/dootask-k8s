@@ -14,7 +14,7 @@ stringData:
   DB_PORT: "3306"
   DB_DATABASE: "dootask"
   DB_PREFIX: "pre_"
-  REDIS_HOST: "dootask-redis"
+  REDIS_HOST: "redis-master.dootask-saas-share.svc"
   REDIS_PORT: "6379"
   TIMEZONE: "PRC"
   TAG: $TAG
@@ -127,7 +127,7 @@ data:
 
     MEMCACHED_HOST=127.0.0.1
 
-    REDIS_HOST=dootask-redis
+    REDIS_HOST=redis-master.dootask-saas-share.svc
     REDIS_PASSWORD=null
     REDIS_PORT=6379
 
@@ -161,3 +161,84 @@ data:
     ZINCSEARCH_HOST=z.zincsearch.svc
     ZINCSEARCH_PORT=4080
     ZINCSEARCH_PASSWORD=123456
+  app.py: |
+    import os
+    import yaml
+    from fastapi import FastAPI, HTTPException
+    from pydantic import BaseModel
+    from datetime import datetime
+    from typing import Optional, Dict
+
+    app = FastAPI()
+
+    BASE_CONFIG_DIR = "/app/config"
+
+    class InstallRequest(BaseModel):
+        version: str = "latest"
+        params: Dict = {}
+        resources: Dict = {"cpu_limit": "0", "memory_limit": "0"}
+        appid: str
+
+    class UninstallRequest(BaseModel):
+        appid: str
+
+    def ensure_config_dir(appid: str):
+        app_dir = os.path.join(BASE_CONFIG_DIR, appid)
+        os.makedirs(app_dir, exist_ok=True)
+        return app_dir
+
+    def get_config_path(appid: str):
+        return os.path.join(BASE_CONFIG_DIR, appid, "config.yaml")
+
+    def read_config(appid: str):
+        config_path = get_config_path(appid)
+        if not os.path.exists(config_path):
+            return None
+        with open(config_path, 'r') as f:
+            return yaml.safe_load(f)
+
+    def write_config(appid: str, config: Dict):
+        config_path = get_config_path(appid)
+        ensure_config_dir(appid)
+        with open(config_path, 'w') as f:
+            yaml.dump(config, f, default_flow_style=False)
+
+    @app.post("/appstore/api/v1/internal/install")
+    async def install(request: InstallRequest):
+        current_config = read_config(request.appid) or {
+            "install_at": "",
+            "install_num": 0,
+            "install_version": "",
+            "status": "not_installed",
+            "params": {},
+            "resources": {"cpu_limit": "0", "memory_limit": "0"}
+        }
+
+        current_config.update({
+            "status": "installed",
+            "install_num": current_config.get("install_num", 0) + 1,
+            "install_at": datetime.now().isoformat(),
+            "install_version": request.version,
+            "params": request.params,
+            "resources": request.resources
+        })
+
+        write_config(request.appid, current_config)
+        return {"code": 0, "message": "Install successful", "data": current_config}
+
+    @app.post("/appstore/api/v1/internal/uninstall")
+    async def uninstall(request: UninstallRequest):
+        current_config = read_config(request.appid)
+        if not current_config:
+            raise HTTPException(status_code=404, detail=f"App {request.appid} not found")
+
+        current_config["status"] = "not_installed"
+        write_config(request.appid, current_config)
+        return {"code": 0, "message": "Uninstall successful", "data": current_config}
+
+    @app.get("/appstore/api/v1/internal/status")
+    async def get_status(appid: str):
+        current_config = read_config(appid)
+        if not current_config:
+            raise HTTPException(status_code=404, detail=f"App {appid} not found")
+        return {"code": 0, "message": "Success", "data": current_config}  
