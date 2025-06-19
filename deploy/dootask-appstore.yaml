@@ -27,22 +27,22 @@ spec:
               value: strict
             - name: HOST_PWD
               value: /tmp
-        volumeMounts:
-        - name: appstore-data
-          mountPath: /var/www/docker/appstore
-          subPath: appstore
-      - name: appstore
-        image: rubyroes/fastapi:latest
-        ports:
-        - containerPort: 8000
-        volumeMounts:
-        - name: appstore-data
-          mountPath: /app/config
-          subPath: appstore/config
+          volumeMounts:
+          - name: appstore-data
+            mountPath: /var/www/docker/appstore
+            subPath: appstore
+        - name: re-appstore
+          image: rubyroes/fastapi:latest
+          ports:
+          - containerPort: 8000
+          volumeMounts:
+          - name: appstore-data
+            mountPath: /app/config
+            subPath: appstore/config
       volumes:
       - name: appstore-data
         persistentVolumeClaim:
-          claimName: dootask-app-pvc    
+          claimName: dootask-app-pvc
 ---
 apiVersion: v1
 kind: Service
