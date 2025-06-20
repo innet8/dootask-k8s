@@ -164,14 +164,17 @@ data:
   app.py: |
     import os
     import yaml
-    from fastapi import FastAPI, HTTPException
+    from fastapi import FastAPI, HTTPException, Header, Request
     from pydantic import BaseModel
     from datetime import datetime
     from typing import Optional, Dict
+    import httpx
+    from kubernetes import client as k8s_client, config as k8s_config
 
     app = FastAPI()
 
     BASE_CONFIG_DIR = "/app/config"
+    APPSTORE_API_URL = "http://dootask-appstore/api/v1/list"
 
     class InstallRequest(BaseModel):
         version: str = "latest"
@@ -179,8 +182,102 @@ data:
         resources: Dict = {"cpu_limit": "0", "memory_limit": "0"}
         appid: str
 
-    class UninstallRequest(BaseModel):
-        appid: str
+    K8S_APPS = ["ai", "approve", "okr"]
+    K8S_APPS_DIR = "/app/apps/"
+    try:
+        k8s_config.load_incluster_config()  # For running inside cluster
+    except:
+        k8s_config.load_kube_config()  # For local development
+
+    def get_current_namespace():
+        """获取当前运行的命名空间"""
+        try:
+            with open("/var/run/secrets/kubernetes.io/serviceaccount/namespace", "r") as f:
+                return f.read().strip()
+        except IOError:
+            return "default"  # 本地开发或不在集群中运行时使用默认值
+    
+    def install_k8s_resources(appid: str, version: str):
+        app_dir = os.path.join(K8S_APPS_DIR, appid, version, k8s)
+        if not os.path.exists(app_dir):
+            raise HTTPException(status_code=404, detail=f"K8s resources directory not found for app {appid}")
+        
+        # List all YAML files in the directory
+        yaml_files = [f for f in os.listdir(app_dir) if f.endswith(('.yaml', '.yml'))]
+        
+        if not yaml_files:
+            raise HTTPException(status_code=404, detail=f"No YAML files found for app {appid}")
+        
+        # Create Kubernetes API clients
+        core_v1 = k8s_client.CoreV1Api()
+        apps_v1 = k8s_client.AppsV1Api()
+        networking_v1 = k8s_client.NetworkingV1Api()
+        current_namespace = get_current_namespace()
+
+        for yaml_file in yaml_files:
+            file_path = os.path.join(app_dir, yaml_file)
+            with open(file_path, 'r') as f:
+                try:
+                    # Parse the YAML file
+                    yaml_content = yaml.safe_load(f)
+                    if not yaml_content:
+                        continue
+                    kind = yaml_content.get('kind', '').lower()
+                    
+                    if kind == 'deployment':
+                        apps_v1.create_namespaced_deployment(
+                            body=yaml_content,
+                            namespace=current_namespace
+                        )
+                    elif kind == 'service':
+                        core_v1.create_namespaced_service(
+                            body=yaml_content,
+                            namespace=current_namespace
+                        )
+                    elif kind == 'configmap':
+                        core_v1.create_namespaced_config_map(
+                            body=yaml_content,
+                            namespace=current_namespace
+                        )
+                    elif kind == 'secret':
+                        core_v1.create_namespaced_secret(
+                            body=yaml_content,
+                            namespace=current_namespace
+                        )
+                    
+                except Exception as e:
+                    raise HTTPException(
+                        status_code=500,
+                        detail=f"Failed to create {kind} from {yaml_file}: {str(e)}"
+                    )
+
+    # Add this helper function
+    def uninstall_k8s_resources(appid: str):
+        current_namespace = get_current_namespace()
+        try:
+            core_v1 = k8s_client.CoreV1Api()
+            apps_v1 = k8s_client.AppsV1Api()
+            networking_v1 = k8s_client.NetworkingV1Api()
+            
+            # Delete deployment
+            apps_v1.delete_namespaced_deployment(
+                name=f"dootask-{appid}",
+                namespace=current_namespace,
+                propagation_policy="Foreground"
+            )
+            
+            # Delete service
+            core_v1.delete_namespaced_service(
+                name=f"dootask-{appid}",
+                namespace=current_namespace
+            )
+            
+                
+        except Exception as e:
+            raise HTTPException(
+                status_code=500,
+                detail=f"Failed to delete Kubernetes resources for {appid}: {str(e)}"
+            )
 
     def ensure_config_dir(appid: str):
         app_dir = os.path.join(BASE_CONFIG_DIR, appid)
@@ -188,7 +285,7 @@ data:
         return app_dir
 
     def get_config_path(appid: str):
-        return os.path.join(BASE_CONFIG_DIR, appid, "config.yaml")
+        return os.path.join(BASE_CONFIG_DIR, appid, "config.yml")
 
     def read_config(appid: str):
         config_path = get_config_path(appid)
@@ -203,8 +300,46 @@ data:
         with open(config_path, 'w') as f:
             yaml.dump(config, f, default_flow_style=False)
 
+    async def get_app_info(appid: str, token: str):
+        headers = {"Token": token}
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.get(APPSTORE_API_URL, headers=headers)
+                if response.status_code != 200:
+                    raise HTTPException(status_code=response.status_code, detail="Failed to fetch app info")
+                
+                data = response.json()
+                if data.get("code") != 200:
+                    raise HTTPException(status_code=400, detail=data.get("message", "Invalid response from appstore"))
+                
+                for app in data.get("data", []):
+                    if app.get("id") == appid:
+                        return app
+                raise HTTPException(status_code=404, detail=f"App {appid} not found in appstore")
+        except httpx.RequestError as e:
+            raise HTTPException(status_code=500, detail=f"Error connecting to appstore: {str(e)}")
+
     @app.post("/appstore/api/v1/internal/install")
-    async def install(request: InstallRequest):
+    async def install(
+        request: InstallRequest,
+        authorization: str = Header(..., alias="Token")
+    ):
+        # Get app info from appstore
+        app_info = await get_app_info(request.appid, authorization)
+        
+        # Get first version if available, otherwise use requested version
+        versions = app_info.get("versions", [])
+        install_version = versions[0] if versions else request.version
+        if request.appid in K8S_APPS:
+            try:
+                install_k8s_resources(request.appid, install_version)
+            except HTTPException as e:
+                raise e
+            except Exception as e:
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"Failed to install Kubernetes resources: {str(e)}"
+                )
         current_config = read_config(request.appid) or {
             "install_at": "",
             "install_num": 0,
@@ -218,27 +353,49 @@ data:
             "status": "installed",
             "install_num": current_config.get("install_num", 0) + 1,
             "install_at": datetime.now().isoformat(),
-            "install_version": request.version,
+            "install_version": install_version,  # Use the version from appstore
             "params": request.params,
             "resources": request.resources
         })
 
         write_config(request.appid, current_config)
-        return {"code": 0, "message": "Install successful", "data": current_config}
+        return {"code": 200, "message": "Install successful", "data": current_config}
 
-    @app.post("/appstore/api/v1/internal/uninstall")
-    async def uninstall(request: UninstallRequest):
-        current_config = read_config(request.appid)
+    @app.get("/appstore/api/v1/internal/uninstall/{appid}")
+    async def uninstall(
+        appid: str = Path(..., title="The ID of the app to uninstall"),
+    ):
+        # 统一处理 appid（从路径或请求体）
+        target_appid = appid if appid else (request.appid if request else None)
+        if not target_appid:
+            raise HTTPException(status_code=400, detail="App ID must be specified")
+        
+        current_config = read_config(target_appid)
         if not current_config:
-            raise HTTPException(status_code=404, detail=f"App {request.appid} not found")
+            raise HTTPException(status_code=404, detail=f"App {target_appid} not found")
+
+        # 如果是 K8S 应用，执行 Kubernetes 资源删除
+        # if target_appid in K8S_APPS:
+        #     try:
+        #         uninstall_k8s_resources(target_appid)
+        #     except Exception as e:
+        #         logging.error(f"Failed to uninstall K8S resources for {target_appid}: {str(e)}")
+        #         raise HTTPException(
+        #             status_code=500,
+        #             detail=f"Failed to uninstall K8S resources: {str(e)}"
+        #         )
 
         current_config["status"] = "not_installed"
-        write_config(request.appid, current_config)
-        return {"code": 0, "message": "Uninstall successful", "data": current_config}
+        write_config(target_appid, current_config)
+        return {
+            "code": 200,
+            "message": "Uninstall successful",
+            "data": current_config
+        }
 
     @app.get("/appstore/api/v1/internal/status")
     async def get_status(appid: str):
         current_config = read_config(appid)
         if not current_config:
             raise HTTPException(status_code=404, detail=f"App {appid} not found")
-        return {"code": 0, "message": "Success", "data": current_config}  
+        return {"code": 200, "message": "Success", "data": current_config}

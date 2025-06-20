@@ -8,73 +8,87 @@ data:
         default upgrade;
         ''      close;
     }
+ 
     upstream service {
-        server php:20000 weight=5 max_fails=3 fail_timeout=30s;
+        server dootask-php:20000 weight=5 max_fails=3 fail_timeout=30s;
         keepalive 16;
     }
-
     server {
         listen 80;
 
-        root /var/www/public;
-        index index.html index.htm index.php;
-        client_max_body_size 1024M;
-        autoindex off;
-        charset utf-8;
-        add_header Access-Control-Expose-Headers "Date, Last-Modified, Age" always;
+        include /etc/nginx/conf.d/site/*.conf;
 
+        root /var/www/public;
+
+        client_max_body_size  1024M;
+
+        autoindex off;
+        index index.html index.htm index.php;
+
+        charset utf-8;
         proxy_http_version 1.1;
         proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-Host $http_x_forwarded_host;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-Proto $http_x_forwarded_proto;
         proxy_set_header Host $host;
-
         location / {
             try_files $uri @laravels;
         }
 
-        location ~ /\.well-known {
+        location ~ \.well-known{
             allow all;
         }
 
         location = /ws {
             proxy_set_header Upgrade $http_upgrade;
             proxy_set_header Connection $connection_upgrade;
-            proxy_read_timeout 3600s; # Consider if you really need a 1-hour timeout
+            proxy_read_timeout 3600s;
             proxy_send_timeout 3600s;
             proxy_connect_timeout 3600s;
             proxy_pass http://service;
         }
 
         location @laravels {
-            proxy_set_header Connection ""; # Important for keepalive with the upstream
+            proxy_http_version 1.1;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-Host $http_x_forwarded_host;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $http_x_forwarded_proto;
+            proxy_set_header Host $host;
+            proxy_set_header Scheme $scheme;
+            proxy_set_header Server-Protocol $server_protocol;
+            proxy_set_header Server-Name $server_name;
+            proxy_set_header Server-Addr $server_addr;
+            proxy_set_header Server-Port $server_port;
             proxy_pass http://service;
         }
-
         # Appstore location
         location /appstore/ {
             proxy_set_header X-Forwarded-Host $http_x_forwarded_host/appstore; 
             proxy_set_header Upgrade $http_upgrade;
             proxy_set_header Connection $connection_upgrade;
-            proxy_pass http://dootask-appstore.dootask-saas-share.svc/;
+            proxy_pass http://dootask-appstore/;
         }
         
-        location /appstore/api/v1/internal/install {
+        location = /appstore/api/v1/internal/install {
             proxy_set_header X-Forwarded-Host $http_x_forwarded_host/appstore; 
             proxy_set_header Upgrade $http_upgrade;
             proxy_set_header Connection $connection_upgrade;
-            proxy_pass http://dootask-appstore.dootask-saas-share.svc:8000/;
+            proxy_pass http://dootask-appstore:8000;
         }
 
-        location /appstore/api/v1/internal/uninstall {
+        location = /appstore/api/v1/internal/uninstall/ {
             proxy_set_header X-Forwarded-Host $http_x_forwarded_host/appstore; 
             proxy_set_header Upgrade $http_upgrade;
             proxy_set_header Connection $connection_upgrade;
-            proxy_pass http://dootask-appstore.dootask-saas-share.svc:8000/;
+            proxy_pass http://dootask-appstore:8000;
         }        
         include /var/www/docker/nginx/site/*.conf;
         
     }
+
+
 ---
 apiVersion: v1
 kind: ConfigMap
@@ -88,11 +102,6 @@ data:
   office.conf: |
     location /office/ {
         proxy_set_header X-Forwarded-Host $http_x_forwarded_host/office;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection $connection_upgrade;
-        proxy_pass http://dootask-office.dootask-saas-share.svc/;
-    }
-    location /office/ {
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection $connection_upgrade;
         proxy_pass http://documentserver.dootask-saas-share.svc:8888/;
@@ -116,3 +125,67 @@ data:
     location /minder/ {
         proxy_pass http://dootask-minder.dootask-saas-share.svc/;
     }
+  approve.conf: |
+    location /approve/ {
+        proxy_pass http://dootask-approve/;
+    }
+    location /approve/api/ {
+        auth_request /approveAuth;
+        proxy_pass http://dootask-approve/api/;
+    }
+    location /approveAuth {
+        internal;
+        proxy_set_header Content-Type "application/json";
+        proxy_set_header Content-Length $request_length;
+        proxy_pass http://service/api/approve/verifyToken;
+    }
+  okr.conf: |
+    location /apps/okr/ {
+        proxy_pass http://dootask-okr:5566/apps/okr/;
+    }
+  ai.conf: |
+    location /ai/ {
+        proxy_http_version 1.1;
+        proxy_buffering off;
+        proxy_cache off;
+        proxy_read_timeout 300s;
+        proxy_send_timeout 300s;
+        proxy_set_header Scheme $scheme;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection $connection_upgrade;
+        proxy_pass http://dootask-ai:5001/;
+    }
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: dootask-ai
+spec:
+  ports:
+  - port: 5001
+    targetPort: 5001
+  selector:
+    app: dootask-ai
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: dootask-approve
+spec:
+  ports:
+  - port: 80
+    targetPort: 80
+  selector:
+    app: dootask-approve
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: dootask-okr
+spec:
+  ports:
+  - port: 5566
+    targetPort: 5566
+  selector:
+    app: dootask-okr

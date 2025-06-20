@@ -60,14 +60,3 @@ spec:
             secretKeyRef:
               name: dootask-secret
               key: APP_KEY
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: dootask-approve
-spec:
-  ports:
-  - port: 80
-    targetPort: 80
-  selector:
-    app: dootask-approve

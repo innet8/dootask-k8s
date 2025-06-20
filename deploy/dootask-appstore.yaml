@@ -15,6 +15,7 @@ spec:
       labels:
         app: dootask-appstore
     spec:
+      serviceAccountName: dootask-appstore
       containers:
         - name: appstore
           image: 'dootask/appstore:0.1.2'
@@ -51,6 +52,10 @@ metadata:
 spec:
   ports:
   - port: 80
+    name: appstore
     targetPort: 80
+  - port: 8000
+    name: re
+    targetPort: 8000
   selector:
     app: dootask-appstore
