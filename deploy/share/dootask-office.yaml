@@ -3,7 +3,7 @@ kind: Deployment
 metadata:
   name: dootask-office
 spec:
-  replicas: 1
+  replicas: 3
   selector:
     matchLabels:
       app: dootask-office
@@ -15,13 +15,74 @@ spec:
 
       containers:
       - name: office
-        image: hub.hitosea.com/dootask/office:v0.0.1
+        image: thomisus/onlyoffice-documentserver-unlimited:8.3.3
         env:
-        - name: JWT_SECRET
+        - name: DB_TYPE
           valueFrom:
             secretKeyRef:
-              name: dootask-secret
-              key: APP_KEY
+              name: office-secret
+              key: DB_TYPE
+        - name: DB_HOST
+          valueFrom:
+            secretKeyRef:
+              name: office-secret
+              key: DB_HOST
+        - name: DB_PORT
+          valueFrom:
+            secretKeyRef:
+              name: office-secret
+              key: DB_PORT
+        - name: DB_NAME
+          valueFrom:
+            secretKeyRef:
+              name: office-secret
+              key: DB_NAME
+        - name: DB_USER
+          valueFrom:
+            secretKeyRef:
+              name: office-secret
+              key: DB_USER
+        - name: DB_PWD
+          valueFrom:
+            secretKeyRef:
+              name: office-secret
+              key: DB_PWD
+        - name: AMQP_URI
+          valueFrom:
+            secretKeyRef:
+              name: office-secret
+              key: AMQP_URI
+        - name: AMQP_TYPE
+          valueFrom:
+            secretKeyRef:
+              name: office-secret
+              key: AMQP_TYPE
+        - name: REDIS_SERVER_HOST
+          valueFrom:
+            secretKeyRef:
+              name: office-secret
+              key: REDIS_SERVER_HOST
+        - name: REDIS_SERVER_PORT
+          valueFrom:
+            secretKeyRef:
+              name: office-secret
+              key: REDIS_SERVER_PORT
+        - name: REDIS_SERVER_PASS
+          valueFrom:
+            secretKeyRef:
+              name: office-secret
+              key: REDIS_SERVER_PASS
+        - name: NGINX_WORKER_PROCESSES
+          valueFrom:
+            secretKeyRef:
+              name: office-secret
+              key: NGINX_WORKER_PROCESSES
+        - name: JWT_ENABLED
+          valueFrom:
+            secretKeyRef:
+              name: office-secret
+              key: JWT_ENABLED
+
         volumeMounts:
         - name: app-data
           mountPath: /var/log/onlyoffice
@@ -63,7 +124,7 @@ metadata:
   name: dootask-office-pvc
 spec:
   accessModes:
-    - ReadWriteOnce
+    - ReadWriteMany
   storageClassName: csi-cephfs-sc
   resources:
     requests:

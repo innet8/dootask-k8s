@@ -366,7 +366,7 @@ data:
         appid: str = Path(..., title="The ID of the app to uninstall"),
     ):
         # 统一处理 appid（从路径或请求体）
-        target_appid = appid if appid else (request.appid if request else None)
+        target_appid = appid 
         if not target_appid:
             raise HTTPException(status_code=400, detail="App ID must be specified")
         
