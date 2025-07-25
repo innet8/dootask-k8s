@@ -18,7 +18,7 @@ spec:
       serviceAccountName: dootask-appstore
       containers:
         - name: appstore
-          image: 'dootask/appstore:0.1.2'
+          image: 'dootask/appstore:0.1.9'
           ports:
             - name: http
               containerPort: 80
@@ -37,13 +37,22 @@ spec:
           ports:
           - containerPort: 8000
           volumeMounts:
-          - name: appstore-data
-            mountPath: /app/config
-            subPath: appstore/config
+            - name: appstore-data
+              mountPath: /app/config
+              subPath: appstore/config
+            - name: appstore-data
+              mountPath: /app/apps
+              subPath: appstore/apps
+            - name: app-py
+              mountPath: /app/app.py
+              subPath: app.py
       volumes:
-      - name: appstore-data
-        persistentVolumeClaim:
-          claimName: dootask-app-pvc
+        - name: appstore-data
+          persistentVolumeClaim:
+            claimName: dootask-app-pvc
+        - name: app-py
+          configMap:
+            name: dootask-config
 ---
 apiVersion: v1
 kind: Service

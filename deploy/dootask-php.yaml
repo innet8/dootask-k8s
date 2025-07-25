@@ -21,7 +21,7 @@ spec:
           mountPath: /app
       containers:
       - name: php
-        image: kuaifan/php:swoole-8.0.rc20
+        image: kuaifan/php:swoole-8.0.rc21
         env:
         - name: LANG
           value: "C.UTF-8"

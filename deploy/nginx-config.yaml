@@ -100,7 +100,7 @@ data:
         proxy_set_header X-Forwarded-Host $http_x_forwarded_host/office;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection $connection_upgrade;
-        proxy_pass http://dootask-office.dootask-saas-share.svc/;
+        proxy_pass http://dootask-office/;
     }
 
   drawio.conf: |

@@ -1,0 +1,70 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: dootask-office
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: dootask-office
+  template:
+    metadata:
+      labels:
+        app: dootask-office
+    spec:
+
+      containers:
+      - name: office
+        image: hub.hitosea.com/dootask/office:v0.0.1
+        env:
+        - name: JWT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: dootask-secret
+              key: APP_KEY
+        volumeMounts:
+        - name: app-data
+          mountPath: /var/log/onlyoffice
+          subPath: office/logs
+        - name: app-data
+          mountPath: /var/www/onlyoffice/Data
+          subPath: office/data
+        
+      - name: office-logs
+        image: busybox
+        command: ["/bin/sh", "-c"]
+        args:
+        - |
+          tail -F /var/log/onlyoffice/*.log 2>/dev/null || true
+        volumeMounts:
+        - name: app-data
+          mountPath: /var/log/onlyoffice
+          subPath: office
+      volumes:
+      - name: app-data
+        persistentVolumeClaim:
+          claimName: dootask-office-pvc
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: dootask-office
+spec:
+  ports:
+  - port: 80
+    targetPort: 80
+  selector:
+    app: dootask-office
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: dootask-office-pvc
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: csi-cephfs-sc
+  resources:
+    requests:
+      storage: 10Gi
