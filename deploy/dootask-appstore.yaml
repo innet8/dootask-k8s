@@ -15,7 +15,7 @@ spec:
       labels:
         app: dootask-appstore
     spec:
-      serviceAccountName: dootask-appstore
+     
       containers:
         - name: appstore
           image: 'dootask/appstore:0.1.9'

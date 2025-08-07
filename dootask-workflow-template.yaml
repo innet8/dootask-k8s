@@ -1,0 +1,168 @@
+apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+metadata:
+  name: dootask-k8s-deploy
+  namespace: argo
+spec:
+  entrypoint: dootask-deploy
+  serviceAccountName: dootask-deployer
+  arguments:
+    parameters:
+    - name: git-url
+      value: "https://github.com/innet8/dootask-k8s.git"
+    - name: git-branch
+      value: "main"
+    - name: tag
+      value: "pro"
+    - name: db-password
+      value: ""
+    - name: db-root-password
+      value: ""
+    - name: app-key
+      value: ""
+    - name: app-id
+      value: ""
+    - name: namespace
+      value: "dootask-test"
+  
+  templates:
+  - name: dootask-deploy
+    steps:
+    - - name: print-params
+        template: print-parameters
+    - - name: checkout-and-deploy
+        template: checkout-and-deploy
+
+
+  - name: print-parameters
+    script:
+      image: alpine:latest
+      command: [sh]
+      source: |
+        echo "部署参数信息："
+        echo "命名空间: {{workflow.parameters.namespace}}"
+        echo "应用ID: {{workflow.parameters.app-id}}"
+        echo "应用密钥: {{workflow.parameters.app-key}}"
+        echo "标签: {{workflow.parameters.tag}}"
+
+  - name: checkout-and-deploy
+    script:
+      image: bitnami/kubectl:latest
+      command: [bash]
+      source: |
+        echo "=== 第一步：代码检出 ==="
+        git clone {{workflow.parameters.git-url}} /tmp/workspace
+        cd /tmp/workspace
+        git checkout {{workflow.parameters.git-branch}}
+        echo "代码检出完成"
+        ls -la /tmp/workspace
+        
+        echo "=== 第二步：开始部署到开发环境 ==="
+
+        export TAG="{{workflow.parameters.tag}}"
+        export DB_PASSWORD="{{workflow.parameters.db-password}}"
+        export DB_ROOT_PASSWORD="{{workflow.parameters.db-root-password}}"
+        export APP_KEY="{{workflow.parameters.app-key}}"
+        export APP_ID="{{workflow.parameters.app-id}}"
+        export NS="{{workflow.parameters.namespace}}"
+        
+        echo "创建命名空间: $NS"
+        kubectl create namespace $NS --dry-run=client -o yaml | kubectl apply -f -
+        
+        echo "应用配置文件..."
+        envsubst < deploy/config.yaml | kubectl -n $NS apply -f -
+        
+        echo "应用部署文件..."
+        for file in deploy/*.yaml; do
+          filename=$(basename "$file")
+          if [[ "$filename" != "config.yaml" && "$filename" != "ingress.yaml" && "$filename" != "init-job.yaml" ]]; then
+            echo "应用文件: $filename"
+            kubectl -n $NS apply -f "$file"
+          fi
+        done
+        
+        echo "等待MariaDB就绪..."
+        kubectl wait --for=condition=Ready pod/dootask-mariadb-0 -n $NS --timeout=600s
+        
+        echo "应用初始化作业..."
+        kubectl -n $NS apply -f deploy/init-job.yaml
+
+        echo "处理TLS证书..."
+        if kubectl -n default get secret dootask.top >/dev/null 2>&1; then
+          kubectl -n default get secret dootask.top -o yaml | \
+          sed '/namespace:/d;/uid:/d;/resourceVersion:/d' | \
+          kubectl -n $NS apply -f -
+        else
+          echo "警告: 默认命名空间中未找到 dootask.top 证书"
+        fi
+
+        echo "应用Ingress配置..."
+        envsubst < deploy/ingress.yaml | kubectl -n $NS apply -f -
+        
+        echo "部署完成！"
+  ttlStrategy:
+    secondsAfterCompletion: 300
+  podGC:
+    strategy: OnPodCompletion
+
+
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: dootask-deployer
+  namespace: argo
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: dootask-deployer
+rules:
+# Argo Workflows 运行时权限
+- apiGroups: ["argoproj.io"]
+  resources: ["workflowtaskresults"]
+  verbs: ["get", "list", "create", "update", "patch", "delete"]
+- apiGroups: ["argoproj.io"]
+  resources: ["workflows", "workflowtemplates"]
+  verbs: ["get", "list", "patch"]
+
+# 基础Kubernetes权限
+- apiGroups: [""]
+  resources: ["namespaces"]
+  verbs: ["get", "list", "create", "patch"]
+- apiGroups: [""]
+  resources: ["pods", "services", "configmaps", "secrets", "persistentvolumeclaims"]
+  verbs: ["get", "list", "create", "update", "patch", "delete"]
+- apiGroups: ["apps"]
+  resources: ["deployments", "statefulsets", "replicasets"]
+  verbs: ["get", "list", "create", "update", "patch", "delete"]
+- apiGroups: ["batch"]
+  resources: ["jobs"]
+  verbs: ["get", "list", "create", "update", "patch", "delete"]
+- apiGroups: ["networking.k8s.io"]
+  resources: ["ingresses"]
+  verbs: ["get", "list", "create", "update", "patch", "delete"]
+- apiGroups: ["storage.k8s.io"]
+  resources: ["storageclasses"]
+  verbs: ["get", "list"]
+- apiGroups: [""]
+  resources: ["events"]
+  verbs: ["get", "list"]
+- apiGroups: [""]
+  resources: ["pods/status"]
+  verbs: ["get"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: dootask-deployer
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: dootask-deployer
+subjects:
+- kind: ServiceAccount
+  name: dootask-deployer
+  namespace: argo

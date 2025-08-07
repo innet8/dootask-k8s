@@ -31,6 +31,7 @@ pipeline {
             sh 'mkdir -p ~/.kube/'
             sh 'echo "$KUBECONFIG_CONFIG" > ~/.kube/config'
             sh 'envsubst < deploy/config.yaml| kubectl -n $NS apply -f - ;'
+
             sh 'for file in deploy/*.yaml; do  [[ "$file" != "deploy/config.yaml" && "$file" != "deploy/ingress.yaml" && "$file" != "deploy/init-job.yaml" ]] && kubectl -n $NS apply -f $file; done'
             sh 'kubectl wait --for=condition=Ready pod/dootask-mariadb-0 -n $NS --timeout=600s;kubectl -n $NS apply -f deploy/init-job.yaml'
             sh 'kubectl -n default get secret dootask.top -o yaml| sed "/namespace:/d;/uid:/d;/resourceVersion:/d" | kubectl -n $NS apply -f  -'
