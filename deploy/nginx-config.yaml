@@ -133,7 +133,7 @@ data:
         internal;
         proxy_set_header Content-Type "application/json";
         proxy_set_header Content-Length $request_length;
-        proxy_pass http://service/api/approve/verifyToken;
+        proxy_pass http://dootask-php:20000/api/approve/verifyToken;
     }
   okr.conf: |
     location /apps/okr/ {

@@ -1,0 +1,55 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: dootask-ai
+  namespace: dootask-test
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: dootask-ai
+  template:
+    metadata:
+      labels:
+        app: dootask-ai
+    spec:
+      initContainers:
+        - name: editredis
+          image: kuaifan/dootask-ai:0.3.5
+          volumeMounts:
+            - name: shared-volume
+              mountPath: /helper
+          command: ["/bin/sh", "-c"]
+          args: 
+            - |
+              cp /app/helper/redis.py /helper/redis.py
+              sed -i "s/dootask_ai:/ai_${APP_ID}:/" /helper/redis.py
+          env:
+          - name: APP_ID
+            valueFrom:
+              secretKeyRef:
+                name: dootask-secret
+                key: APP_ID
+      containers:
+      - name: ai
+        image: kuaifan/dootask-ai:0.3.5
+        env:
+        - name: REDIS_HOST
+          valueFrom:
+            secretKeyRef:
+              name: dootask-secret
+              key: REDIS_HOST
+        - name: REDIS_PORT
+          valueFrom:
+            secretKeyRef:
+              name: dootask-secret
+              key: REDIS_PORT
+
+        volumeMounts:
+        - name: shared-volume
+          mountPath: /app/helper/redis.py
+          subPath: redis.py
+      volumes:
+        - name: shared-volume
+          emptyDir: {}
+

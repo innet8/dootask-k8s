@@ -14,7 +14,7 @@ stringData:
   DB_PORT: "3306"
   DB_DATABASE: "dootask"
   DB_PREFIX: "pre_"
-  REDIS_HOST: "redis-master.dootask-saas-share.svc"
+  REDIS_HOST: "dootask-redis"
   REDIS_PORT: "6379"
   TIMEZONE: "PRC"
   TAG: $TAG
@@ -329,9 +329,9 @@ data:
         # Get first version if available, otherwise use requested version
         versions = app_info.get("versions", [])
         install_version = versions[0] if versions else request.version
-        if request.appid in K8S_APPS:
+        #if request.appid in K8S_APPS:
 
-                install_k8s_resources(request.appid, install_version)
+        #        install_k8s_resources(request.appid, install_version)
 
         current_config = read_config(request.appid) or {
             "install_at": "",
