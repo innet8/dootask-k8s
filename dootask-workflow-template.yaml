@@ -2,7 +2,7 @@ apiVersion: argoproj.io/v1alpha1
 kind: WorkflowTemplate
 metadata:
   name: dootask-k8s-deploy
-  namespace: argo
+  namespace: argo-workflows
 spec:
   entrypoint: dootask-deploy
   serviceAccountName: dootask-deployer

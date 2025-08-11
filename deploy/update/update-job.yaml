@@ -1,0 +1,59 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: dootask-update-job
+spec:
+  ttlSecondsAfterFinished: 60
+  template:
+    spec:
+      containers:
+      - name: init
+        image: kuaifan/php:swoole-8.0.rc20
+        command: ["/bin/sh", "-c"]
+        args:
+          - |
+            cd /app/dootask
+
+            git fetch --all
+            git reset --hard origin/$TAG
+            git pull
+            composer update
+            php artisan migrate --force
+
+            sed -i "s/DB_PASSWORD/ZINCSEARCH_PASSWORD/" app/Module/ZincSearch/ZincSearchBase.php 2>&1
+            sed -i "s/'dialogMsg';/'dialogMsg_$APP_ID';/" app/Module/ZincSearch/ZincSearchDialogMsg.php 2>&1
+            sed -i "s/'dialogUser';/'dialogUser_$APP_ID';/" app/Module/ZincSearch/ZincSearchDialogMsg.php 2>&1
+            sed -i "s/'keyValue';/'keyValue_$APP_ID';/" app/Module/ZincSearch/ZincSearchKeyValue.php 2>&1
+            
+            mkdir -p /app/supervisor/conf.d
+            mkdir -p /app/php
+            mkdir -p /app/appstore
+            
+            cp docker/crontab/crontab.conf /app/supervisor/conf.d/
+            cp docker/php/php.conf /app/supervisor/conf.d/
+            cp docker/php/php.ini /app/php/
+
+            echo "Preparation completed successfully" >/app/success
+        env:
+        - name: COMPOSER_ALLOW_SUPERUSER
+          value: "1"
+        - name: APP_ID
+          valueFrom:
+            secretKeyRef:
+              name: dootask-secret
+              key: APP_ID
+        - name: TAG
+          valueFrom:
+            secretKeyRef:
+              name: dootask-secret
+              key: TAG
+        volumeMounts:
+        - name: app-data
+          mountPath: /app
+      
+      volumes:
+      - name: app-data
+        persistentVolumeClaim:
+          claimName: dootask-app-pvc
+      restartPolicy: OnFailure
+

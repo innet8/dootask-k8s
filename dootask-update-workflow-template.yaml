@@ -1,0 +1,79 @@
+apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+metadata:
+  name: dootask-k8s-update
+  namespace: argo-workflows
+spec:
+  entrypoint: dootask-update
+  serviceAccountName: dootask-deployer
+  arguments:
+    parameters:
+    - name: git-url
+      value: "https://github.com/innet8/dootask-k8s.git"
+    - name: git-branch
+      value: "main"
+    - name: tag
+      value: "pro"
+    - name: namespace
+      value: "dootask-demo"
+  
+  templates:
+  - name: dootask-update
+    steps:
+    - - name: checkout-and-update
+        template: checkout-and-update
+    - - name: rollingUpdate
+        template: rollingUpdate
+
+  - name: checkout-and-update
+    script:
+      image: bitnami/kubectl:latest
+      command: [bash]
+      source: |
+        echo "=== 第一步：代码检出 ==="
+        git clone {{workflow.parameters.git-url}} /tmp/workspace
+        cd /tmp/workspace
+        git checkout {{workflow.parameters.git-branch}}
+        echo "代码检出完成"
+        ls -la /tmp/workspace
+        
+        echo "=== 第二步：开始部署到开发环境 ==="
+
+        export TAG="{{workflow.parameters.tag}}"
+
+        export NS="{{workflow.parameters.namespace}}"
+
+        echo "应用update作业..."
+        kubectl -n $NS apply -f deploy/update/update-job.yaml
+
+        echo "处理TLS证书..."
+        if kubectl -n default get secret dootask.top >/dev/null 2>&1; then
+          kubectl -n default get secret dootask.top -o yaml | \
+          sed '/namespace:/d;/uid:/d;/resourceVersion:/d' | \
+          kubectl -n $NS apply -f -
+        else
+          echo "警告: 默认命名空间中未找到 dootask.top 证书"
+        fi
+
+        echo "更新完成！"
+
+  - name: rollingUpdate
+    script:
+      image: bitnami/kubectl:latest
+      command: [bash]
+      source: |
+        export NS="{{workflow.parameters.namespace}}"
+        if kubectl wait --for=condition=complete -n $NS job/dootask-update-job --timeout=300s; then
+            echo "Job 完成，继续后续操作..."
+            kubectl rollout restart deployment/dootask-php -n $NS
+            sleep 10
+            kubectl rollout restart deployment/dootask-nginx -n $NS
+        else
+            echo "Job 执行失败或超时！"
+            exit 1
+        fi
+
+  ttlStrategy:
+    secondsAfterCompletion: 3000
+
+
