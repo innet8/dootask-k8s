@@ -8,7 +8,7 @@ spec:
     spec:
       containers:
       - name: init
-        image: kuaifan/php:swoole-8.0.rc20
+        image: kuaifan/php:swoole-8.0.rc21
         command: ["/bin/sh", "-c"]
         args:
           - |
