@@ -5,7 +5,7 @@ metadata:
   namespace: argo-workflows
 spec:
   entrypoint: dootask-update
-  serviceAccountName: dootask-deployer
+  serviceAccountName: argo-deployer
   arguments:
     parameters:
     - name: git-url
