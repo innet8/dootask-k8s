@@ -22,8 +22,8 @@ spec:
     steps:
     - - name: checkout-and-update
         template: checkout-and-update
-    - - name: rollingUpdate
-        template: rollingUpdate
+    - - name: rollingupdate
+        template: rollingupdate
 
   - name: checkout-and-update
     script:
@@ -57,7 +57,7 @@ spec:
 
         echo "更新完成！"
 
-  - name: rollingUpdate
+  - name: rollingupdate
     script:
       image: bitnami/kubectl:latest
       command: [bash]
