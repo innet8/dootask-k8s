@@ -18,7 +18,7 @@ spec:
      
       containers:
         - name: appstore
-          image: 'dootask/appstore:0.1.9'
+          image: 'dootask/appstore:0.2.6'
           ports:
             - name: http
               containerPort: 80

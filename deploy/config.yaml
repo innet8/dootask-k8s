@@ -127,7 +127,7 @@ data:
 
     MEMCACHED_HOST=127.0.0.1
 
-    REDIS_HOST=redis-master.dootask-saas-share.svc
+    REDIS_HOST=dootask-redis
     REDIS_PASSWORD=null
     REDIS_PORT=6379
 

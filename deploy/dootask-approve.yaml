@@ -19,7 +19,7 @@ spec:
 
       containers:
       - name: approve
-        image: kuaifan/dooapprove:0.1.5
+        image: kuaifan/dooapprove:0.1.7
         env:
         - name: TZ
           valueFrom:
