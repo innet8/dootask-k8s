@@ -47,6 +47,36 @@ spec:
             secretKeyRef:
               name: dootask-secret
               key: TAG
+        - name: DB_HOST
+          valueFrom:
+            secretKeyRef:
+              name: dootask-secret
+              key: DB_HOST
+        - name: DB_PORT
+          valueFrom:
+            secretKeyRef:
+              name: dootask-secret
+              key: DB_PORT
+        - name: DB_DATABASE
+          valueFrom:
+            secretKeyRef:
+              name: dootask-secret
+              key: DB_DATABASE
+        - name: DB_USERNAME
+          valueFrom:
+            secretKeyRef:
+              name: dootask-secret
+              key: DB_USERNAME
+        - name: DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: dootask-secret
+              key: DB_PASSWORD
+        - name: DB_PREFIX
+          valueFrom:
+            secretKeyRef:
+              name: dootask-secret
+              key: DB_PREFIX
         volumeMounts:
         - name: app-data
           mountPath: /app
