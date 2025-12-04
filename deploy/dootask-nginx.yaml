@@ -25,6 +25,8 @@ spec:
         env:
         - name: NGINX_WORKER_PROCESSES
           value: "4"
+        - name: NGINX_ENVSUBST_OUTPUT_DIR
+          value: /etc/nginx
         ports:
         - containerPort: 80
           name: http
@@ -36,7 +38,7 @@ spec:
         - name: confd
           mountPath: /etc/nginx/conf.d
         - name: confd
-          mountPath: /etc/nginx/templates
+          mountPath: /etc/nginx/templates/nginx.conf.template
           subPath: nginx.conf.template
         - name: app-data
           mountPath: /var/www/public
