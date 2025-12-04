@@ -22,6 +22,9 @@ spec:
       containers:
       - name: nginx
         image: nginx:alpine
+        env:
+        - name: NGINX_WORKER_PROCESSES
+          value: "4"
         ports:
         - containerPort: 80
           name: http
@@ -32,6 +35,9 @@ spec:
           mountPath: /etc/nginx/conf.d/site
         - name: confd
           mountPath: /etc/nginx/conf.d
+        - name: confd
+          mountPath: /etc/nginx/templates
+          subPath: nginx.conf.template
         - name: app-data
           mountPath: /var/www/public
           subPath: dootask/public
