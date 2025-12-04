@@ -8,7 +8,7 @@ spec:
     spec:
       containers:
       - name: init
-        image: kuaifan/php:swoole-8.0.rc20
+        image: kuaifan/php:swoole-8.0.rc21
         command: ["/bin/sh", "-c"]
         args:
           - |
@@ -18,7 +18,7 @@ spec:
                 cd dootask
                 if [ ! -f "vendor/autoload.php" ]; then
                     composer config repo.packagist composer https://packagist.phpcomposer.com
-                    composer install
+                    composer install --optimize-autoloader
                     composer config --unset repos.packagist
                 fi
                 php artisan migrate --seed --force
@@ -32,7 +32,7 @@ spec:
                 git fetch --all
                 git reset --hard origin/$TAG
                 git pull
-                composer update
+                composer install --optimize-autoloader
                 php artisan migrate --force
             fi
             sed -i "s/DB_PASSWORD/ZINCSEARCH_PASSWORD/" app/Module/ZincSearch/ZincSearchBase.php 2>&1

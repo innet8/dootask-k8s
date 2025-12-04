@@ -17,7 +17,7 @@ spec:
             git fetch --all
             git reset --hard origin/$TAG
             git pull
-            composer update
+            composer install --optimize-autoloader
             php artisan migrate --force
 
             sed -i "s/DB_PASSWORD/ZINCSEARCH_PASSWORD/" app/Module/ZincSearch/ZincSearchBase.php 2>&1
